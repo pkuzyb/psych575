@@ -1,0 +1,180 @@
+---
+title: "Prelim results"
+author: "Yubin Zhang"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+## Load packages
+
+```{r load-pkg}
+# Add additional packages you need
+library(lme4)
+library(modelsummary) 
+library(lmerTest)
+library(effects)
+library(sjPlot)
+library(sjmisc) 
+library(ggplot2)
+```
+
+
+```{r data-import}
+# Read in the data from the Web
+data <- read.csv('./exp1dat.csv')
+```
+## equation 
+i. 
+Repeated-Measure level (Lv 1):
+$$\ln(\frac{\text{P}_{i(j,k)}}{1-\text{P}_{i(j,k)}}) = \beta_{0(j, k)} + e_{ijk}$$
+Between-cell (Person $\times$ item(Continuum)) level (Lv 2):
+$$\beta_{0(j, k)} = \gamma_{00} + \beta_{1(j,k)} \text{VOT}_{(j,k)}+ \beta_{2(j)} \text{Continuum_Lexicality}_{(k)} +\beta_{3j} \text{Continuum_Relative_Onset_Density}_{(k)} \\+\beta_{4} \text{Continuum_Rhyme_Density}_{(k)} u_{0j} + \beta_{5(j)} \text{Consonant_Place}_{(k)}+\beta_{6(j)}\text{Target_Word_Frequency}_{(k)}\\
++\beta_{7}\text{Target_Word_Frequency:Continuum_Lexicality}_{(k)}+\\\beta_{8}\text{Continuum_Rhyme_Density:Continuum_Lexicality}_{(k)}+u_{0j}+ v_{0k}$$
+Person and continuum random slopes
+$$
+\begin{aligned}
+  \beta_{1(j,k)} = \gamma_{01}  + u_{1j} +v_{1k} \\
+  \beta_{2(j)} = \gamma_{02}  +v_{2k} \\
+  \beta_{3(j)} = \gamma_{03}  +v_{3k} \\
+  \beta_{4} = \gamma_{04}  \\
+  \beta_{5(j)} = \gamma_{05}  + u_{1j} +v_{4k} \\
+  \beta_{6(j)} = \gamma_{06}  + u_{1j} +v_{5k} \\
+  \beta_{7} = \gamma_{07}  \\
+  \beta_{8} = \gamma_{08}  \\
+\end{aligned}
+$$
+$$
+\begin{aligned}
+\beta_{0(j, k)} = \gamma_{00} + \gamma_{10}\text{condition}_{(j,k)}+u_{1j}\text{condition}_{jk}+ v_{1k}\text{condition}_jk  + u_{0j} + v_{0k}+e_{ijk}
+\end{aligned}
+$$
+## model
+```{r model, cache = TRUE}
+vot <- c(10, 35, 60, 85, 110)
+for(i in 1:length(data$item)){
+ data$vot[i]<-vot[data$step[i]]
+}
+data$vot <- scale(data$vot)
+data$cons <-as.factor(data$cons)
+data$cons<- relevel(data$cons, ref = "bilabial")
+data$Wtype <- as.factor(data$Wtype)
+data$Wtype<- relevel(data$Wtype, ref = "nonword-word")
+
+data$Dtype <- as.factor(data$Dtype)
+data$Dtype<- relevel(data$Dtype, ref = "sparser-denser")
+
+data$sharedwden<-as.numeric(data$sharedwden)
+data$Vwden<-as.numeric(data$Vwden)
+data$VLwden<-as.numeric(data$VLwden)
+
+data$onsetwden<-scale(data$Vwden+data$VLwden)
+data$sharedwden <-scale(data$sharedwden)
+data$logfre<-scale(as.numeric(data$logfre))
+
+  
+contrasts(data$Wtype) <- contr.treatment(2)-0.5
+contrasts(data$Dtype) <- contr.treatment(2)-0.5
+
+my.coding<-matrix(c(-1/3,2/3,-1/3,-1/3,-1/3,2/3), ncol=2)
+contrasts(data$cons)<-my.coding
+
+accmod1 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1|item) +(1 | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+#summary(accmod1)
+
+accmod2 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1+vot|item) +(1 | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+anova(accmod1,accmod2)
+##These don't work
+#pchisq(REMLcrit(accmod2) - REMLcrit(accmod1), df = 2, lower.tail = FALSE)
+#ranova(accmod1)
+
+accmod3 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1|item) +(1+vot | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+anova(accmod1,accmod3)
+
+accmod4 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1|item) +(1+vot+Wtype | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+anova(accmod3,accmod4)
+
+accmod5 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1|item) +(1+vot+Wtype+Dtype | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+anova(accmod4,accmod5)
+
+
+accmod6 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1+vot|item) +(1+vot+Wtype+Dtype+cons | participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+summary(accmod6)
+# I will report this model for now. The others take a long time to run.
+anova(accmod5,accmod6)
+
+#accmod7 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1+vot|item) +(1+vot+Wtype+cons +Dtype+sharedwden| participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+
+#anova(accmod5,accmod7)
+
+#accmod8<- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1+vot|item) +(1+vot+Wtype+Dtype+cons +logfre| participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+#anova(accmod6,accmod8)
+
+#accmod9 <- glmer(acc~ 1 + vot+Wtype+Dtype+ sharedwden+ sharedwden:Wtype+cons+logfre+logfre:Wtype+(1+vot|item) +(1+vot+Wtype+Dtype+cons +logfre+ logfre:Wtype| participant) ,control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=100000)), family = binomial,data = data)
+#anova(accmod8,accmod9)
+
+
+```
+##summary table
+
+```{r summary}
+tab_model(accmod6)
+```
+
+## plot
+```{r plot}
+##target word frequency:lexicality
+ef <- Effect(c("logfre",'vot','Wtype'),accmod6,xlevels=list(logfre=c(-1.6,1.4),vot=seq(-1.5,2,0.05)))
+pred<- as.data.frame(ef)
+pred$vot <- pred$vot* attr(data$vot, 'scaled:scale') + attr(data$vot, 'scaled:center')
+pred$logfre <- ifelse(pred$logfre==-1.6, 'low','high')
+#pred$sharedwden <- pred$sharedwden* attr(data$sharedwden, 'scaled:scale') + attr(data$sharedwden, 'scaled:center')
+
+ggplot(pred, aes(x=vot, y=fit,color=Wtype,linetype=logfre ))+
+  scale_color_manual('continuum lexicality',values=c("red", "blue"))+
+  scale_linetype_manual('target word frequency',values=c("solid", "dashed"))+
+  geom_line()+xlab('VOT') + ylab('predicted probability of a voiced response')+
+  scale_y_continuous(limits=c(0,1))+
+  theme_bw()
+
+
+##relative onset density:lexicality
+
+ef <- Effect(c("Dtype",'vot','Wtype'),accmod6,xlevels=list(vot=seq(-1.5,2,0.05)))
+pred<- as.data.frame(ef)
+pred$vot <- pred$vot* attr(data$vot, 'scaled:scale') + attr(data$vot, 'scaled:center')
+
+
+ggplot(pred, aes(x=vot, y=fit,color=Wtype,linetype=Dtype ))+
+  scale_color_manual('continuum lexicality',values=c("red", "blue"))+
+  scale_linetype_manual('relative onset density',values=c("solid", "dashed"))+
+  geom_line()+xlab('VOT') + ylab('predicted probability of a voiced response')+
+  scale_y_continuous(limits=c(0,1))+
+  theme_bw()
+
+##rhyme density:lexicality
+ef <- Effect(c("sharedwden",'vot','Wtype'),accmod6,xlevels=list(sharedwden=c(-1.6,1.4),vot=seq(-1.5,2,0.05)))
+pred<- as.data.frame(ef)
+pred$vot <- pred$vot* attr(data$vot, 'scaled:scale') + attr(data$vot, 'scaled:center')
+pred$shareddtype <- ifelse(pred$sharedwden==-1.6, 'low','high')
+pred$sharedwden <- pred$sharedwden* attr(data$sharedwden, 'scaled:scale') + attr(data$sharedwden, 'scaled:center')
+
+
+ggplot(pred, aes(x=vot, y=fit,color=Wtype,linetype=shareddtype ))+
+  scale_color_manual('continuum lexicality',values=c("red", "blue"))+
+  scale_linetype_manual('continuum rhyme density',values=c("solid", "dashed"))+
+  geom_line()+xlab('VOT') + ylab('predicted probability of a voiced response')+
+  scale_y_continuous(limits=c(0,1))+
+  theme_bw()
+
+```
+
+Summary:
+There was a significant effect of VOT, suggesting that longer VOT produces fewer voiced responses. The continuum lexicality effect was significant. There were more voiced responses for the word-nonword continuum, revealing facilitative lexical effect of target word. We also found a non-significant trend for the interaction between continuum lexicality and target word frequency. Continuum Lexicality effect was augmented for higher-frequency target word in a continuum as revealed by the significant interaction between continuum lexicality and continuum rhyme density.  Continuum lexicality was also modulated by continuum rhyme density. Larger rhyme density reduced lexicality effect suggesting inhibitory lexical effects of rhyme neighbors.
